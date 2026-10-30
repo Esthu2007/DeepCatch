@@ -1,290 +1,171 @@
-
-"""DeepCatch - TinyFish-powered earbuds buying agent."""
-
+"""DeepCatch v3 - TinyFish agents fetch live listings; filtering/sorting happens in the browser.
+Run: set TINYFISH_API_KEY, then  python app.py
+"""
 import concurrent.futures as cf
-import json
-import os
-import re
+import hashlib, json, os, re, threading, time, uuid
+from copy import deepcopy
+from urllib.parse import quote_plus
 
 from flask import Flask, request, jsonify, send_from_directory
 from tinyfish import TinyFish, CompleteEvent
 
 app = Flask(__name__, static_folder="static")
-client = TinyFish()
+# TIMEOUT: seconds before unfinished stores are dropped. Results show per store as they finish.
+CACHE, TIMEOUT, TTL, MAX_STORES, PER_STORE, DEFAULT_ON = "cache.json", 240, 1800, 10, 5, 4
 
-CACHE = "cache.json"
-
+# First DEFAULT_ON are pre-selected. VERIFY each URL in a browser; delete any that fail.
 STORES = {
-    "Flipkart": "https://www.flipkart.com/search?q={q}"
+    "Flipkart": "https://www.flipkart.com/search?q={q}",
+    "Amazon": "https://www.amazon.in/s?k={q}",
+    "Croma": "https://www.croma.com/searchB?q={q}",
+    "Reliance Digital": "https://www.reliancedigital.in/search?q={q}",
+    "Tata CLiQ": "https://www.tatacliq.com/search/?searchCategory=all&text={q}",
+    "Snapdeal": "https://www.snapdeal.com/search?keyword={q}",
+    "Vijay Sales": "https://www.vijaysales.com/search/{q}",
+    "Meesho": "https://www.meesho.com/search?q={q}",
+    "Ajio": "https://www.ajio.com/search/?text={q}",
+    "Nykaa": "https://www.nykaa.com/search/result/?q={q}",
+    "Pepperfry": "https://www.pepperfry.com/site_product/search?q={q}",
+    "Decathlon": "https://www.decathlon.in/search?Ntt={q}",
 }
 
-GOAL = """
-Extract the first 6 true wireless earbuds (not neckbands,
-cases or accessories) priced at most {budget} INR.
-
-Do not log in and do not click Buy or Add to cart.
-
-Return valid JSON with this structure:
-{{"products": [
-  {{
-    "name": "product name",
-    "brand": "brand name",
-    "price": 1500,
-    "mrp": null,
-    "rating": null,
-    "review_count": null,
-    "url": "product URL",
-    "seller": null,
-    "delivery": null
-  }}
-]}}
-
-Prices must be plain numbers in INR.
-"""
+jobs, lock = {}, threading.Lock()
+pool = cf.ThreadPoolExecutor(max_workers=30)
 
 
-@app.route("/")
-def home():
-    return send_from_directory(app.static_folder, "index.html")
+def num(v, d=0.0):
+    try:
+        if isinstance(v, str):
+            m = re.search(r"-?\d+(?:\.\d+)?", v.replace(",", ""))
+            return float(m.group()) if m else d
+        return float(v) if v is not None else d
+    except (TypeError, ValueError):
+        return d
 
 
-def parse_budget(query):
-    match = re.search(
-        r"(?:under|below|upto|up to|within|<)\s*₹?\s*([\d,]+)\s*(k)?",
-        query.lower()
+def build_goal(query):
+    return (
+        f'This is a store search results page for: "{query}". Be FAST: read only the first screen '
+        "of results (scroll at most once), never open product pages, never log in or add to cart. "
+        f"Skip ads, sponsored items, accessories and unrelated products. Return up to {PER_STORE} real matching "
+        "products. Use only visible info, null if missing. JSON only: "
+        '{"products":[{"name":str,"brand":str|null,"price":number,"mrp":number|null,'
+        '"rating":number|null,"review_count":number|null,"url":str|null,"delivery":str|null}]}. '
+        "Prices are plain INR numbers."
     )
 
-    if not match:
-        return 3000
 
-    amount = int(match.group(1).replace(",", ""))
-    return amount * 1000 if match.group(2) else amount
-
-
-def run_store(store, url_template, query, budget):
-    url = url_template.format(q=query.replace(" ", "+"))
-
-    print(f"[{store}] Starting TinyFish search...")
-
-    try:
-        with client.agent.stream(
-            url=url,
-            goal=GOAL.format(budget=budget)
-        ) as stream:
-            print(f"[{store}] Stream opened; waiting for results...")
-
-            for event in stream:
-                if isinstance(event, CompleteEvent):
-                    result = event.result_json
-
-                    if isinstance(result, str):
-                        print(f"[{store}] Received result JSON.")
-                        result = json.loads(result)
-
-                    if isinstance(result, dict):
-                        products = result.get("products", [])
-                    else:
-                        products = []
-
-                    if not isinstance(products, list):
-                        products = []
-
-                    valid_products = []
-
-                    for product in products:
-                        if not isinstance(product, dict):
-                            continue
-
-                        product["store"] = store
-                        valid_products.append(product)
-
-                    print(
-                        f"[{store}] Products received: "
-                        f"{len(valid_products)}"
-                    )
-
-                    return valid_products
-
-        print(f"[{store}] Stream ended without a completion event.")
-
-    except Exception as error:
-        print(f"[{store}] Search failed: {error}")
-
+def run_store(store, query):
+    url = STORES[store].format(q=quote_plus(query))
+    client = TinyFish()  # one client per thread
+    with client.agent.stream(url=url, goal=build_goal(query)) as stream:
+        for ev in stream:
+            if isinstance(ev, CompleteEvent):
+                r = ev.result_json
+                r = json.loads(r) if isinstance(r, str) else r
+                out = []
+                for p in (r or {}).get("products", []):
+                    if not isinstance(p, dict) or not p.get("name"):
+                        continue
+                    p["store"] = store
+                    for k in ("price", "mrp", "rating", "review_count"):
+                        p[k] = num(p.get(k))
+                    if p["price"] > 0:
+                        out.append(p)
+                return out
     return []
 
 
-def num(value, default=0.0):
+def worker(job_id, store):
     try:
-        if value is None or value == "":
-            return default
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+        items, state = run_store(store, jobs[job_id]["query"]), "completed"
+    except Exception as e:
+        print(f"[{store}] failed: {e}")
+        items, state = [], "failed"
+    with lock:
+        j = jobs.get(job_id)
+        if j and j["stores"].get(store) == "searching":  # ignore late results after timeout
+            j["products"].extend(items)
+            j["stores"][store] = state
 
 
-def enrich(products, budget):
-    # Keep products with valid prices within the requested budget.
-    filtered = []
+def dedupe(products):
+    seen, out = set(), []
+    for p in products:
+        k = (p["store"], p["name"].lower())
+        if k not in seen:
+            seen.add(k)
+            out.append(p)
+    return out
 
-    for product in products:
-        price = num(product.get("price"))
 
-        if 0 < price <= budget:
-            product["price"] = price
-            filtered.append(product)
+def load_cache():
+    try:
+        return json.load(open(CACHE, encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
 
-    if not filtered:
-        return []
 
-    prices = [p["price"] for p in filtered]
-    low, high = min(prices), max(prices)
+def save_cache(key, products):
+    c = load_cache()
+    c[key] = {"ts": time.time(), "products": products}
+    json.dump(c, open(CACHE, "w", encoding="utf-8"), ensure_ascii=False)
 
-    for product in filtered:
-        price = num(product.get("price"))
-        mrp = num(product.get("mrp"))
-        rating = num(product.get("rating"))
-        reviews = num(product.get("review_count"))
 
-        flags = []
+@app.get("/")
+def home():
+    return send_from_directory("static", "index.html")
 
-        # A smoothed rating avoids overvaluing products with few reviews.
-        bayes = (
-            (rating * reviews + 4.0 * 50) / (reviews + 50)
-            if rating > 0
-            else 3.0
-        )
 
-        trust = 1.0
-
-        if mrp > price > 0:
-            discount = 1 - price / mrp
-            product["discount_pct"] = round(discount * 100)
-
-            if discount > 0.70:
-                flags.append("Discount may be inflated")
-                trust -= 0.4
-
-        if reviews < 100:
-            flags.append("Few reviews - rating is less reliable")
-            trust -= 0.3
-
-        if rating > 0 and rating < 3.8:
-            flags.append("Below-average rating")
-            trust -= 0.2
-
-        product["f_price"] = (
-            1.0
-            if high == low
-            else round(1 - (price - low) / (high - low), 3)
-        )
-
-        product["f_rating"] = round(
-            max(0, min(1, (bayes - 3.0) / 2.0)), 3
-        )
-
-        product["f_trust"] = round(max(0, trust), 3)
-        product["flags"] = flags
-
-    # Put higher-quality candidates first.
-    filtered.sort(
-        key=lambda p: (
-            0.4 * p["f_price"]
-            + 0.35 * p["f_rating"]
-            + 0.25 * p["f_trust"]
-        ),
-        reverse=True
-    )
-
-    return filtered
+@app.get("/api/config")
+def config():
+    return jsonify({"stores": [{"name": s, "default": i < DEFAULT_ON} for i, s in enumerate(STORES)],
+                    "max_stores": MAX_STORES, "timeout": TIMEOUT})
 
 
 @app.post("/api/search")
 def search():
-    data = request.get_json(silent=True) or {}
+    d = request.get_json(silent=True) or {}
+    query = str(d.get("query", "")).strip()
+    stores = [s for s in d.get("stores", []) if s in STORES][:MAX_STORES]
+    if not query: return jsonify({"error": "Enter what you want to buy."}), 400
+    if not stores: return jsonify({"error": "Pick at least one store."}), 400
+    key = hashlib.sha1(json.dumps([query.lower(), sorted(stores)]).encode()).hexdigest()
+    hit = load_cache().get(key)
+    job = {"query": query, "key": key, "products": [], "started": time.time(), "saved": False,
+           "stores": {s: "searching" for s in stores}, "cached": False}
+    if hit and time.time() - hit["ts"] < TTL:  # repeat search = instant
+        job.update(products=hit["products"], stores={s: "completed" for s in stores}, cached=True, saved=True)
+    job_id = str(uuid.uuid4())
+    with lock:
+        jobs[job_id] = job
+    if not job["cached"]:
+        for s in stores:
+            pool.submit(worker, job_id, s)
+    return jsonify({"job_id": job_id}), 202
 
-    query = data.get("query", "").strip() or "earbuds under 2000"
-    budget = parse_budget(query)
 
-    # Remove the budget phrase to form the store search query.
-    base = re.sub(
-        r"(?:under|below|upto|up to|within)\s*₹?\s*[\d,]+\s*k?",
-        "",
-        query,
-        flags=re.IGNORECASE
-    ).strip() or "earbuds"
-
-    products = []
-
-    executor = cf.ThreadPoolExecutor(max_workers=len(STORES))
-
-    futures = {
-        executor.submit(
-            run_store, store, template, base, budget
-        ): store
-        for store, template in STORES.items()
-    }
-
-    try:
-        done, pending = cf.wait(
-            futures,
-            timeout=180,
-            return_when=cf.ALL_COMPLETED
-        )
-
-        for future in done:
-            store = futures[future]
-
-            try:
-                products.extend(future.result())
-            except Exception as error:
-                print(f"[{store}] failed: {error}")
-
-        for future in pending:
-            store = futures[future]
-            print(
-                f"[{store}] Timed out after 180 seconds. "
-                "Returning available results."
-            )
-            future.cancel()
-
-    finally:
-        # Do not make Flask wait for unfinished background searches.
-        executor.shutdown(wait=False, cancel_futures=True)
-
-    products = enrich(products, budget)
-    source = "live"
-
-    if products:
-        try:
-            with open(CACHE, "w", encoding="utf-8") as file:
-                json.dump(
-                    {"budget": budget, "products": products},
-                    file,
-                    ensure_ascii=False
-                )
-        except OSError as error:
-            print(f"Could not save cache: {error}")
-
-    elif os.path.exists(CACHE):
-        try:
-            with open(CACHE, encoding="utf-8") as file:
-                cached = json.load(file)
-
-            # Only reuse cached results for the same budget.
-            if cached.get("budget") == budget:
-                products = cached.get("products", [])
-                source = "cached"
-
-        except (OSError, json.JSONDecodeError) as error:
-            print(f"Could not read cache: {error}")
-
-    return jsonify({
-        "query": query,
-        "budget": budget,
-        "source": source,
-        "products": products
-    })
+@app.get("/api/search/<job_id>")
+def status(job_id):
+    with lock:
+        job = jobs.get(job_id)
+        if not job: return jsonify({"error": "Search not found."}), 404
+        if time.time() - job["started"] > TIMEOUT:
+            for s, v in job["stores"].items():
+                if v == "searching": job["stores"][s] = "timed out"
+        snap = deepcopy(job)
+        done = "searching" not in snap["stores"].values()
+        products = dedupe(snap["products"])
+        if done and not job["saved"]:
+            job["saved"] = True
+            if products: save_cache(job["key"], products)
+    source = "cached" if snap["cached"] else "live"
+    if done and not products:  # nothing live: fall back to any older saved run
+        old = load_cache().get(snap["key"])
+        if old: products, source = old["products"], "cached"
+    return jsonify({"products": products, "stores": snap["stores"], "done": done, "source": source,
+                    "elapsed": round(time.time() - snap["started"], 1)})
 
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=False)
+    app.run(port=int(os.environ.get("PORT", 5000)), debug=False, threaded=True)
