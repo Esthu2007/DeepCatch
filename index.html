@@ -1,65 +1,197 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DeepCatch</title>
 <style>
-:root{--bg:#f6f8fb;--card:#fff;--text:#13202e;--muted:#5d6b7a;--accent:#0b6fa4;--warn:#b45309;--line:#dde4ec}
-@media (prefers-color-scheme:dark){:root{--bg:#0e1620;--card:#16222f;--text:#e8eef5;--muted:#9fb0c1;--accent:#4db3e6;--warn:#fbbf24;--line:#26364a}}
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--text)}
-main{max-width:860px;margin:0 auto;padding:24px 16px}
-h1{margin:0}h1 span{color:var(--accent)}.tag{color:var(--muted);margin:4px 0 20px}
-.row{display:flex;gap:8px}input[type=text]{flex:1;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-size:16px}
-button{padding:12px 20px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:16px;cursor:pointer}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:14px}
-.win{border:2px solid var(--accent)}.badge{background:var(--accent);color:#fff;border-radius:6px;padding:2px 8px;font-size:12px}
-.sl{display:grid;grid-template-columns:70px 1fr 40px;gap:8px;align-items:center;font-size:14px}
-.meta{color:var(--muted);font-size:14px}.flag{color:var(--warn);font-size:14px}.price{font-size:22px;font-weight:600}
-.bar{height:6px;background:var(--line);border-radius:3px;margin:3px 0 8px}.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
-a{color:var(--accent)}
-</style></head><body><main>
-<h1>Deep<span>Catch</span></h1><p class="tag">Dive deep. Catch the best buy.</p>
-<div class="row"><input id="q" type="text" value="best earbuds under 2000"><button id="go">Dive in</button></div>
-<div id="status" class="meta" style="margin-top:10px"></div>
-<div id="weights" class="card" hidden>
-  <b>What matters to you?</b>
-  <div class="sl">Price<input type="range" id="w_price" min="0" max="100" value="40"><span></span></div>
-  <div class="sl">Rating<input type="range" id="w_rating" min="0" max="100" value="35"><span></span></div>
-  <div class="sl">Trust<input type="range" id="w_trust" min="0" max="100" value="25"><span></span></div>
+:root{--bg:#0b1020;--panel:#141b2f;--text:#f4f7ff;--muted:#a6b1ca;--accent:#31e6c1;--border:#2b3654;--danger:#ff9292;--deal:#ffb84d}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:Inter,"Segoe UI",Arial,sans-serif;color:var(--text);background:radial-gradient(ellipse at top left,#19254a 0,transparent 42%),var(--bg)}
+.wrap{width:min(1100px,94%);margin:auto;padding:26px 0 60px}
+.brand{font-size:26px;font-weight:800}.brand span{color:var(--accent)}
+.search{display:flex;gap:10px;margin-top:16px;padding:10px;border:1px solid var(--border);border-radius:14px;background:var(--panel)}
+#query{flex:1;min-width:0;padding:12px;border:0;outline:0;background:transparent;color:var(--text);font-size:16px}
+button,.btn{border:0;border-radius:10px;padding:10px 20px;background:var(--accent);color:#071a20;font-weight:800;cursor:pointer;font-size:14px}
+button:disabled{opacity:.6;cursor:wait}
+.link{background:none;color:var(--accent);padding:0;font-weight:600}
+.box{margin-top:12px;border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:10px 14px}
+summary{cursor:pointer;font-weight:700}.count{color:var(--muted);font-weight:400;font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{display:flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--border);border-radius:20px;font-size:13px;color:var(--muted);cursor:pointer}
+#progress{margin:16px 0 4px;color:var(--muted);font-size:14px}
+.st{display:inline-block;margin:3px 4px 0 0;padding:3px 9px;border-radius:12px;background:#1b2540;font-size:12px}
+.st.completed{color:var(--accent)}.st.failed,.st.timed{color:var(--danger)}
+#msg{color:var(--muted);margin:8px 0}#msg.error{color:var(--danger)}
+.layout{display:none;grid-template-columns:240px 1fr;gap:20px;margin-top:14px}.layout.show{display:grid}
+aside{border:1px solid var(--border);border-radius:14px;background:var(--panel);padding:16px;align-self:start}
+aside h4{margin:16px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+aside h4:first-child{margin-top:0}
+aside label{display:flex;align-items:center;gap:8px;font-size:14px;padding:3px 0;cursor:pointer}
+aside label span{margin-left:auto;color:var(--muted);font-size:12px}
+.row{display:flex;gap:8px;align-items:center}
+input[type=number],input[type=search],select{width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:#0e1527;color:var(--text);font-size:14px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;color:var(--muted);font-size:14px}
+.bar select{width:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.card{padding:16px;border:1px solid var(--border);border-radius:14px;background:var(--panel);display:flex;flex-direction:column}
+.card.top{border-color:var(--accent)}
+.tag{font-size:11px;font-weight:800;color:#071a20;background:var(--accent);border-radius:6px;padding:2px 7px;align-self:flex-start;margin-bottom:8px}
+.bn{color:var(--accent);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.card h3{margin:5px 0 10px;font-size:15px;line-height:1.4;overflow-wrap:anywhere;flex:1}
+.price{font-size:24px;font-weight:800}.mrp{color:var(--muted);text-decoration:line-through;font-size:13px;margin-left:6px;font-weight:400}
+.off{color:var(--deal);font-size:13px;font-weight:700;margin-left:6px}
+.meta{margin-top:8px;color:var(--muted);font-size:12px;display:flex;gap:6px 12px;flex-wrap:wrap}
+.card a{margin-top:12px;color:var(--accent);font-size:13px;font-weight:700;text-decoration:none}
+.note{margin-top:28px;color:var(--muted);font-size:12px;text-align:center}
+@media(max-width:760px){.layout.show{grid-template-columns:1fr}}
+</style></head><body><main class="wrap">
+<div class="brand">Deep<span>Catch</span></div>
+<form id="form" class="search">
+  <input id="query" type="text" placeholder="What do you want to buy?" autocomplete="off" required>
+  <button id="go" type="submit">Search ↗</button>
+</form>
+<details class="box"><summary>Stores <span class="count" id="storeCount"></span></summary><div class="chips" id="stores"></div></details>
+<div id="progress"></div><div id="msg"></div>
+
+<div class="layout" id="layout">
+  <aside>
+    <h4>Price (₹)</h4>
+    <div class="row"><input type="number" id="pmin" placeholder="Min"><input type="number" id="pmax" placeholder="Max"></div>
+    <h4>Brand</h4><div id="fBrand"></div>
+    <h4>Store</h4><div id="fStore"></div>
+    <h4>Customer rating</h4>
+    <label><input type="radio" name="rt" value="0" checked>Any</label>
+    <label><input type="radio" name="rt" value="4">4★ &amp; up</label>
+    <label><input type="radio" name="rt" value="3">3★ &amp; up</label>
+    <h4>Deals</h4>
+    <label><input type="radio" name="dl" value="0" checked>All</label>
+    <label><input type="radio" name="dl" value="10">10% off or more</label>
+    <label><input type="radio" name="dl" value="30">30% off or more</label>
+    <label><input type="radio" name="dl" value="50">50% off or more</label>
+    <h4>Search within results</h4><input type="search" id="within" placeholder="e.g. wireless, 8GB">
+    <p><button type="button" class="link" id="clear">Clear all filters</button></p>
+  </aside>
+  <section>
+    <div class="bar"><span id="count"></span>
+      <label>Sort <select id="sort"><option value="best">Best match</option><option value="pa">Price: low to high</option>
+      <option value="pd">Price: high to low</option><option value="rt">Rating</option><option value="dl">Biggest discount</option></select></label></div>
+    <div class="grid" id="results"></div>
+  </section>
 </div>
-<div id="out"></div>
+<p class="note">Live data read from store pages by TinyFish agents. Prices change, so verify on the store before buying.</p>
+
 <script>
-let DATA=[];
-const $=id=>document.getElementById(id);
-const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-function score(p){
-  const w={price:+$("w_price").value,rating:+$("w_rating").value,trust:+$("w_trust").value};
-  const t=(w.price+w.rating+w.trust)||1;
-  return (w.price*p.f_price+w.rating*p.f_rating+w.trust*p.f_trust)/t;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const inr = n => Number(n).toLocaleString("en-IN", {style:"currency", currency:"INR", maximumFractionDigits:0});
+let CFG, DATA = [], job = null, timer = null;
+let S = {brands:new Set(), stores:new Set(), rt:0, dl:0, min:"", max:"", q:"", sort:"best"};
+
+const brandOf = p => (p.brand || "Other").trim() || "Other";
+const dealOf = p => p.mrp > p.price && p.price > 0 ? Math.round((1 - p.price / p.mrp) * 100) : 0;
+
+function rank(list){
+  if (!list.length) return;
+  const pr = list.map(p => p.price), lo = Math.min(...pr), hi = Math.max(...pr);
+  list.forEach(p => {
+    const pf = hi === lo ? 1 : 1 - (p.price - lo) / (hi - lo);
+    const rf = p.rating > 0 ? Math.max(0, Math.min(1, ((p.rating * p.review_count + 200) / (p.review_count + 50) - 3) / 2)) : 0.5;
+    p._s = 0.45 * pf + 0.40 * rf + 0.15 * Math.min(dealOf(p), 50) / 50;
+  });
+}
+function visible(){
+  const list = DATA.filter(p =>
+    (!S.brands.size || S.brands.has(brandOf(p).toLowerCase())) &&
+    (!S.stores.size || S.stores.has(p.store)) &&
+    p.rating >= S.rt && dealOf(p) >= S.dl &&
+    (S.min === "" || p.price >= +S.min) && (S.max === "" || p.price <= +S.max) &&
+    (!S.q || (p.name + " " + brandOf(p)).toLowerCase().includes(S.q)));
+  rank(list);
+  const by = {best:(a,b)=>b._s-a._s, pa:(a,b)=>a.price-b.price, pd:(a,b)=>b.price-a.price,
+              rt:(a,b)=>b.rating-a.rating, dl:(a,b)=>dealOf(b)-dealOf(a)}[S.sort];
+  return list.sort(by);
+}
+function facet(el, key, values, set, label = x => x){
+  const counts = {};
+  values.forEach(v => counts[v] = (counts[v] || 0) + 1);
+  el.innerHTML = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([v, n]) =>
+    `<label><input type="checkbox" data-f="${key}" value="${esc(v.toLowerCase())}" ${set.has(key === "stores" ? v : v.toLowerCase()) ? "checked" : ""}>${esc(label(v))}<span>${n}</span></label>`).join("");
 }
 function render(){
-  document.querySelectorAll(".sl span").forEach(s=>s.textContent=s.previousElementSibling.value);
-  const ranked=[...DATA].map(p=>({...p,s:score(p)})).sort((a,b)=>b.s-a.s).slice(0,5);
-  $("out").innerHTML=ranked.map((p,i)=>`
-  <div class="card ${i==0?"win":""}">
-    ${i==0?'<span class="badge">Best catch</span> ':''}<b>${esc(p.name)}</b>
-    <div class="price">₹${Number(p.price).toLocaleString("en-IN")} <span class="meta">on ${esc(p.store)}${p.discount_pct?` · ${p.discount_pct}% off`:""}</span></div>
-    <div class="meta">★ ${esc(p.rating??"n/a")} (${esc(p.review_count??"?")} reviews) · ${esc(p.seller||"seller n/a")} · ${esc(p.delivery||"delivery n/a")}</div>
-    <div class="bar"><i style="width:${Math.round(p.s*100)}%"></i></div>
-    <div class="meta">Score ${(p.s*100).toFixed(0)}/100 · price ${(p.f_price*100).toFixed(0)} · rating ${(p.f_rating*100).toFixed(0)} · trust ${(p.f_trust*100).toFixed(0)}</div>
-    ${p.flags.map(f=>`<div class="flag">⚠ ${esc(f)}</div>`).join("")}
-    ${p.url?`<div><a href="${esc(p.url)}" target="_blank" rel="noopener">View listing (source)</a></div>`:""}
-  </div>`).join("");
+  facet($("fBrand"), "brands", DATA.map(brandOf), S.brands);
+  facet($("fStore"), "stores", DATA.map(p => p.store), S.stores);
+  const list = visible();
+  $("count").textContent = `Showing ${list.length} of ${DATA.length} products`;
+  $("results").innerHTML = list.map((p, i) => {
+    const d = dealOf(p), top = S.sort === "best" && i < 3;
+    const url = /^https?:\/\//i.test(p.url || "") ? p.url : "";
+    const meta = [p.rating > 0 ? `★ ${p.rating}${p.review_count ? ` (${Math.round(p.review_count).toLocaleString("en-IN")})` : ""}` : "", p.store, p.delivery || ""].filter(Boolean);
+    return `<article class="card ${top ? "top" : ""}">${top ? '<span class="tag">TOP PICK</span>' : ""}
+      <div class="bn">${esc(brandOf(p))}</div><h3>${esc(p.name)}</h3>
+      <div><span class="price">${inr(p.price)}</span>${d ? `<span class="mrp">${inr(p.mrp)}</span><span class="off">${d}% off</span>` : ""}</div>
+      <div class="meta">${meta.map(m => `<span>${esc(m)}</span>`).join("")}</div>
+      ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View on ${esc(p.store)} ↗</a>` : ""}</article>`;
+  }).join("") || '<p class="count">No products match these filters.</p>';
 }
-$("go").onclick=async()=>{
-  $("go").disabled=true;$("out").innerHTML="";$("weights").hidden=true;
-  $("status").textContent="TinyFish agents are browsing live stores... this takes about a minute.";
-  try{
-    const r=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:$("q").value})});
-    const d=await r.json();DATA=d.products;
-    $("status").textContent=DATA.length?`Found ${DATA.length} products across stores (budget ₹${d.budget}, source: ${d.source}).`:"No results. Try again or check store URLs.";
-    if(DATA.length){$("weights").hidden=false;render();}
-  }catch(e){$("status").textContent="Error: "+e}
-  $("go").disabled=false;
+
+// ---- events
+$("layout").addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.f === "brands" || t.dataset.f === "stores"){
+    const set = S[t.dataset.f], val = t.dataset.f === "stores" ? [...new Set(DATA.map(p => p.store))].find(s => s.toLowerCase() === t.value) : t.value;
+    t.checked ? set.add(val) : set.delete(val);
+  } else if (t.name === "rt") S.rt = +t.value;
+  else if (t.name === "dl") S.dl = +t.value;
+  else if (t.id === "sort") S.sort = t.value;
+  render();
+});
+$("pmin").oninput = e => { S.min = e.target.value; render(); };
+$("pmax").oninput = e => { S.max = e.target.value; render(); };
+$("within").oninput = e => { S.q = e.target.value.trim().toLowerCase(); render(); };
+$("clear").onclick = () => {
+  S = {brands:new Set(), stores:new Set(), rt:0, dl:0, min:"", max:"", q:"", sort:"best"};
+  ["pmin", "pmax", "within"].forEach(i => $(i).value = ""); $("sort").value = "best";
+  document.querySelector('input[name=rt][value="0"]').checked = true;
+  document.querySelector('input[name=dl][value="0"]').checked = true; render();
 };
-["w_price","w_rating","w_trust"].forEach(id=>$(id).oninput=render);
+
+// ---- stores + search
+function countStores(){ $("storeCount").textContent = `(${document.querySelectorAll("#stores input:checked").length}/${CFG.max_stores} selected)`; }
+async function init(){
+  CFG = await (await fetch("/api/config")).json();
+  $("stores").innerHTML = CFG.stores.map(s => `<label class="chip"><input type="checkbox" value="${esc(s.name)}" ${s.default ? "checked" : ""}>${esc(s.name)}</label>`).join("");
+  $("stores").onchange = e => { if (document.querySelectorAll("#stores input:checked").length > CFG.max_stores) e.target.checked = false; countStores(); };
+  countStores();
+}
+function stop(){ clearTimeout(timer); job = null; $("go").disabled = false; $("go").textContent = "Search ↗"; }
+async function poll(id){
+  if (job !== id) return;
+  try{
+    const r = await (await fetch("/api/search/" + id)).json();
+    if (r.error) throw new Error(r.error);
+    const en = Object.entries(r.stores), fin = en.filter(([, v]) => v !== "searching").length;
+    $("progress").innerHTML = (r.done ? "" : `Searching… ${fin}/${en.length} stores done · ${Math.floor(r.elapsed)}s<br>`) +
+      en.map(([s, v]) => `<span class="st ${v.split(" ")[0]}">${esc(s)}: ${esc(v)}</span>`).join("");
+    if (r.products.length){ DATA = r.products; $("layout").classList.add("show"); render(); }
+    if (r.done){
+      stop(); $("msg").className = "";
+      $("msg").textContent = DATA.length ? (r.source === "cached" ? "Showing recent saved results." : `Done in ${r.elapsed}s.`) : "No products found. Try other stores or a simpler search.";
+      return;
+    }
+    $("msg").textContent = DATA.length ? "More results are still arriving…" : "";
+    timer = setTimeout(() => poll(id), 1000);
+  }catch(e){ stop(); $("msg").className = "error"; $("msg").textContent = "Error: " + e.message; }
+}
+$("form").onsubmit = async e => {
+  e.preventDefault(); stop(); DATA = []; $("clear").onclick(); $("layout").classList.remove("show");
+  $("progress").innerHTML = ""; $("msg").className = "";
+  const stores = [...document.querySelectorAll("#stores input:checked")].map(c => c.value);
+  $("go").disabled = true; $("go").textContent = "Searching…"; $("msg").textContent = "Sending TinyFish agents to your stores…";
+  try{
+    const res = await fetch("/api/search", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({query: $("query").value.trim(), stores})});
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || "Could not start search.");
+    job = d.job_id; poll(job);
+  }catch(err){ stop(); $("msg").className = "error"; $("msg").textContent = "Error: " + err.message; }
+};
+init();
 </script></main></body></html>
